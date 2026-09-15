@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String
+  role      String   @default("operator")
+  createdAt DateTime @default(now())
+}
+
+model Carrier {
+  id               Int          @id @default(autoincrement())
+  carrierCode      String       @unique
+  name             String
+  type             String
+  reliabilityScore Float        @default(0.9)
+  activeShipments  Int          @default(0)
+  createdAt        DateTime     @default(now())
+  shipments        Shipment[]
+  fleetAssets      FleetAsset[]
+}
+
+model Shipment {
+  id                  Int       @id @default(autoincrement())
+  shipmentCode        String    @unique
+  origin              String
+  destination         String
+  originLat           Float
+  originLng           Float
+  destinationLat      Float
+  destinationLng      Float
+  carrierId           Int
+  cargoType           String
+  priority            String
+  status              String
+  estimatedDeparture  DateTime
+  estimatedArrival    DateTime
+  actualArrival       DateTime?
+  weight              Float
+  value               Float
+  isColdChain         Boolean   @default(false)
+  delayHours          Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  carrier             Carrier   @relation(fields: [carrierId], references: [id])
+  coldChainReadings   ColdChainReading[]
+  coldChainAlerts     ColdChainAlert[]
+  riskAssessments     RiskAssessment[]
+  recommendations     Recommendation[]
+  shipmentEvents      ShipmentEvent[]
+  fleetAssignments    FleetAssignment[]
+  affectedDisruptions DisruptionShipment[]
+}
+
+model ShipmentEvent {
+  id          Int      @id @default(autoincrement())
+  shipmentId  Int
+  eventType   String
+  description String
+  location    String?
+  timestamp   DateTime @default(now())
+  shipment    Shipment @relation(fields: [shipmentId], references: [id])
+}
+
+model Disruption {
+  id                Int                  @id @default(autoincrement())
+  disruptionCode    String               @unique
+  name              String
+  type              String
+  description       String
+  location          String
+  latitude          Float
+  longitude         Float
+  radiusKm          Float
+  severity          String
+  status            String
+  startTime         DateTime
+  expectedEndTime   DateTime
+  createdAt         DateTime             @default(now())
+  affectedShipments DisruptionShipment[]
+}
+
+model DisruptionShipment {
+  id           Int        @id @default(autoincrement())
+  disruptionId Int
+  shipmentId   Int
+  disruption   Disruption @relation(fields: [disruptionId], references: [id])
+  shipment     Shipment   @relation(fields: [shipmentId], references: [id])
+}
+
+model Route {
+  id           Int                @id @default(autoincrement())
+  routeCode    String             @unique
+  name         String
+  origin       String
+  destination  String
+  distanceKm   Float
+  durationHrs  Float
+  riskLevel    String             @default("LOW")
+  isActive     Boolean            @default(true)
+  alternatives RouteAlternative[]
+}
+
+model RouteAlternative {
+  id             Int    @id @default(autoincrement())
+  routeId        Int
+  name           String
+  distanceKm     Float
+  durationHrs    Float
+  riskLevel      String
+  costMultiplier Float  @default(1.0)
+  reason         String
+  route          Route  @relation(fields: [routeId], references: [id])
+}
+
+model FleetAsset {
+  id              Int               @id @default(autoincrement())
+  assetCode       String            @unique
+  assetType       String
+  subtype         String?
+  currentLocation String
+  latitude        Float
+  longitude       Float
+  capacity        Float
+  utilization     Float             @default(0)
+  status          String
+  availableFrom   DateTime          @default(now())
+  carrierId       Int?
+  carrier         Carrier?          @relation(fields: [carrierId], references: [id])
+  assignments     FleetAssignment[]
+}
+
+model FleetAssignment {
+  id          Int        @id @default(autoincrement())
+  assetId     Int
+  shipmentId  Int
+  assignedAt  DateTime   @default(now())
+  completedAt DateTime?
+  status      String     @default("ACTIVE")
+  asset       FleetAsset @relation(fields: [assetId], references: [id])
+  shipment    Shipment   @relation(fields: [shipmentId], references: [id])
+}
+
+model ColdChainReading {
+  id           Int      @id @default(autoincrement())
+  shipmentId   Int
+  timestamp    DateTime @default(now())
+  temperature  Float
+  humidity     Float?
+  safeMinTemp  Float
+  safeMaxTemp  Float
+  batteryLevel Float?
+  sensorStatus String   @default("ACTIVE")
+  shipment     Shipment @relation(fields: [shipmentId], references: [id])
+}
+
+model ColdChainAlert {
+  id          Int      @id @default(autoincrement())
+  shipmentId  Int
+  alertType   String
+  severity    String
+  temperature Float?
+  duration    Int?
+  description String
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  shipment    Shipment @relation(fields: [shipmentId], references: [id])
+}
+
+model RiskAssessment {
+  id              Int      @id @default(autoincrement())
+  shipmentId      Int
+  score           Float
+  level           String
+  disruptionScore Float    @default(0)
+  delayScore      Float    @default(0)
+  priorityScore   Float    @default(0)
+  routeScore      Float    @default(0)
+  coldChainScore  Float    @default(0)
+  carrierScore    Float    @default(0)
+  explanation     String
+  calculatedAt    DateTime @default(now())
+  shipment        Shipment @relation(fields: [shipmentId], references: [id])
+}
+
+model Recommendation {
+  id                 Int       @id @default(autoincrement())
+  shipmentId         Int?
+  recommendationType String
+  title              String
+  reason             String
+  priority           String
+  estimatedImpact    String
+  status             String    @default("PENDING")
+  createdAt          DateTime  @default(now())
+  shipment           Shipment? @relation(fields: [shipmentId], references: [id])
+}
+
+model Notification {
+  id         Int      @id @default(autoincrement())
+  type       String
+  title      String
+  message    String
+  severity   String
+  entityType String?
+  entityId   Int?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model AiConversation {
+  id        Int         @id @default(autoincrement())
+  title     String?
+  createdAt DateTime    @default(now())
+  messages  AiMessage[]
+}
+
+model AiMessage {
+  id             Int            @id @default(autoincrement())
+  conversationId Int
+  role           String
+  content        String
+  dataContext    String?
+  createdAt      DateTime       @default(now())
+  conversation   AiConversation @relation(fields: [conversationId], references: [id])
+}
+
+model SimulationScenario {
+  id           Int                @id @default(autoincrement())
+  name         String
+  baselineData String
+  parameters   String
+  createdAt    DateTime           @default(now())
+  results      SimulationResult[]
+}
+
+model SimulationResult {
+  id                Int                @id @default(autoincrement())
+  scenarioId        Int
+  affectedShipments Int
+  criticalShipments Int
+  estimatedDelays   String
+  cargoValueAtRisk  Float
+  fleetUtilization  Float
+  coldChainAlerts   Int
+  recommendations   String
+  calculatedAt      DateTime           @default(now())
+  scenario          SimulationScenario @relation(fields: [scenarioId], references: [id])
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  action     String
+  entityType String?
+  entityId   Int?
+  userId     Int?
+  details    String?
+  createdAt  DateTime @default(now())
+}
